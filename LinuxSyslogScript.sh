@@ -33,7 +33,7 @@ function logit {
 	
 }
 
-#description
+#Print description.
 echo "Description:"
 echo "------------"
 
