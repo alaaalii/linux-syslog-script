@@ -1,30 +1,85 @@
 #!/bin/bash
 
-#Check if the script is being run as root
+#Check if the script is being run as root.
 if [ "$(whoami)" != "root" ]; then
     echo "[ERROR] You must run $(basename $0) as root."
     exit
 fi
 
+LICENSE="LinuxSyslogScript, Copyright (C) 2014 Alaa Ali
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program. If not, see <http://www.gnu.org/licenses/>.  
+
+For more information on the script and for updated versions,
+see: https://github.com/alaaalii/LinuxSyslogScript"
+
 USAGE="Usage: $(basename $0) [options]
 
-$(basename $0) is a script that will...yada yada yada.
+$(basename $0) is a script used to configure your Linux machine to send authentication
+and/or audit logs to an external (syslog) server through the syslog daemon.
+
+If the script is run without specifying the remote IP address, you will be prompted to enter it.
+If the script is run without specifying any \"send\" arguments (--audit or --auth), you will
+be prompted to choose which logs to send. If you pass one or more \"send\" arguments, the script
+will assume that you only want to send that and you will not be prompted while the script is running
+to choose other log types. 
 
 Options include:
-  -h,--help		Print this help message.
-  --remoteip=IPADDRESS	The IP address to which you want this server to send logs to.
-  -q,--quiet		Do not display any messages (except ERROR messages) when running the script. This requires that all other arguments are passed.
-  -y,--yes		Assume Yes to all \"Continue?\" questions and do not display prompts."
+      --audit		   Send audit daemon logs.
+      --auth		   Send authentication logs.
+  -h, --help		   Print this help message.
+      --remoteip=X.X.X.X   The IP address to which you want this server to send logs to.
+  -l, --license		   Show license information.
+  -q, --quiet		   Do not display any messages (except ERROR messages).
+  -qq			   Same as -q, but implies -y.
+  -y, --yes		   Assume Yes to all \"Continue?\" questions and do not display prompts.
+
+LinuxSyslogScript, Copyright (C) 2014 Alaa Ali
+LinuxSyslogScript comes with ABSOLUTELY NO WARRANTY; for details, pass the -l option to the script.
+This is free software, and you are welcome to redistribute it
+under certain conditions; pass the -l option to the script for details.
+
+For more information on the script and for updated versions, see: https://github.com/alaaalii/LinuxSyslogScript"
 
 for i in "$@"
 do
 	case $i in
+		--audit)
+			SAUDIT=1
+			SARGS=1
+			shift
+			;;
+		--auth)
+			SAUTH=1
+			SARGS=1
+			shift
+			;;
 		-h|--help)
 			echo "$USAGE"
 			exit
 			;;
+		-l|--license)
+			echo "$LICENSE"
+			exit
+			;;
 		-q|--quiet)
 			SHHH=1
+			shift
+			;;
+		-qq)
+			SHHH=1
+			SKIPCONT="y"
 			shift
 			;;
 		--remoteip=*)
@@ -35,31 +90,31 @@ do
 			SKIPCONT="y"
 			shift
 			;;
+		*)
+			echo "Unknown option \"$i\"."
+			echo
+			echo "$USAGE"
+			exit
+			;;
 	esac
 done
-  
-# if [ "$1" == "-h" -o "$1" == "--help" ]; then
-    # echo "$USAGE"
-	# exit
-# fi
-
-# if [ "$1" == "-y" -o "$1" == "--yes" ]; then
-    # SKIPCONT="y"
-# fi
 
 #Initiating the log file.
 LOGFILE=$(basename $0 .sh).$(date +%Y-%m-%d_%H-%M-%S).log
 
 function logit {
-
     TIMEDATE=$(date +"%a %b %e %Y %T")
 	LLEVEL=$1
     LOG=$2
     if [ "$LLEVEL" == 1 ]; then
-        echo -e "[INFO]\t$LOG"
+		if [ "$SHHH" != 1 ]; then
+			echo -e "[INFO]\t$LOG"
+		fi
 		echo -e "$TIMEDATE   [INFO]\t$LOG" >> $LOGFILE
 	elif [ "$LLEVEL" == 2 ]; then
-		echo -e "[WARN]\t$LOG"
+		if [ "$SHHH" != 1 ]; then
+			echo -e "[INFO]\t$LOG"
+		fi
 		echo -e "$TIMEDATE   [WARN]\t$LOG" >> $LOGFILE
 	elif [ "$LLEVEL" == 3 ]; then
 		echo -e "[ERROR]\t$LOG"
@@ -67,12 +122,13 @@ function logit {
 	elif [ "$LLEVEL" == 4 ]; then
 		echo -e "$TIMEDATE   [INPUT]\t$LOG" >> $LOGFILE
     fi
-	
 }
 
-#Print description.
-echo "Description:"
-echo "------------"
+if [ "$SHHH" != 1 ]; then
+	#Print description.
+	echo "Description:"
+	echo "------------"
+fi
 
 if [ "$SKIPCONT" != "y" ]; then
     #Asking to proceed.
@@ -85,7 +141,7 @@ if [ "$SKIPCONT" != "y" ]; then
     echo
 fi
 
-#Defining global variables.
+#Defining some global variables.
 SYSPIDF=/var/run/syslogd.pid
 RHELV=$(cat /etc/redhat-release 2&> /dev/null | sed s/.*release\ // | sed s/\ .*// | cut -c1)
 SYSCONF=/etc/syslog.conf
@@ -93,8 +149,9 @@ RSYSCONF=/etc/rsyslog.conf
 AUDITLOG=/var/log/audit/audit.log
 AUDISP=/etc/audisp/plugins.d/syslog.conf
 AUDITRULES=/etc/audit/audit.rules
+BASENAME=$(basename $0)
 
-#--------------------------- START CHECKS ---------------------------#
+#--------------------------------------------- START CHECKS ---------------------------------------------#
 
 #Checking if either syslog or rsyslog is installed.
 #By default, RHEL should at least have syslog installed, so this part should rarely be true.
@@ -114,7 +171,7 @@ fi
 
 #Finding out which syslog daemon is actually installed (syslog or rsyslog).
 #The script will first check which one is running.
-#If none are running, it will fall back to check which .conf file exists.
+#If none are running, it will fall back to check which .conf file exists, checking for rsyslog first because both can exist.
 if cat $SYSPIDF 2&> /dev/null | xargs ps -p 2&> /dev/null | grep -q rsyslog; then
     DAEMON=rsyslog
 elif cat $SYSPIDF 2&> /dev/null | xargs ps -p 2&> /dev/null | grep -q syslog; then
@@ -131,26 +188,23 @@ logit 1 "Found $DAEMON daemon."
 CONF=/etc/$DAEMON.conf
 echo
 
-#Check if audit.log exists (basically, check if auditd daemon is installed).
-#If it doesn't, set AUDITDNI (audit daemon not installed) to 1.
-#This will be referenced later.
+#Check if audit.log exists (this is basically checking if auditd daemon is installed).
+#If it doesn't, set AUDITDNI (audit daemon not installed) to 1. This will be referenced later.
 if [ ! -e "$AUDITLOG" ]; then
     AUDITDNI=1
 fi
 
 #Check if the audit syslog plugin is installed.
-#If it's not, set AUDITSPNI (audit syslog plugin not installed) to 1.
-#This will be referenced later.
+#If it's not, set AUDITSPNI (audit syslog plugin not installed) to 1. This will be referenced later.
 if [ ! -e "$AUDISP" ]; then
     AUDITSPNI=1
 fi
 
-#--------------------------- END CHECKS ---------------------------#
+#--------------------------------------------- END CHECKS ---------------------------------------------#
 
-#--------------------------- START FUNCTIONS ---------------------------#
+#--------------------------------------------- START FUNCTIONS ---------------------------------------------#
 
 function takeBACKUP {
-
 #Taking a backup of the file passed to this function.
 if [ $2 == "beforeconfig" ]; then
     logit 1 "Taking a backup of $1 right before applying configuration."
@@ -162,11 +216,9 @@ logit 1 "The backup will be saved as $1.`date +%Y-%m-%d_%H-%M-%S`.$2."
 cp $1 $1.$(date +%Y-%m-%d_%H-%M-%S).$2
 logit 1 "Done!"
 echo
-
 }
 
 function restartSERVICE {
-
 logit 1 "Restarting $1."
 /etc/init.d/$1 restart &> /dev/null
 
@@ -176,13 +228,14 @@ if [ $? -eq 0 ]; then
 else
 	logit 2 "Unable to restart the $1 service."
     logit 2 "Please restart it manually after the script ends by executing /etc/init.d/$1 restart."
+	#This variable is only going to be used if the user ran the script in quiet mode.
+	#They will be notified that a service could not be restarted, and that they need to look at the log file for more info.
+	UNABLETORESTART=1
 fi
 echo
-
 }
 
 function enableAUDISP {
-
 #Taking a backup of the current audisp file.
 takeBACKUP $AUDISP "beforeconfig"
 
@@ -197,109 +250,37 @@ else
 	logit 2 "Audit logs will not be sent."
 fi
 echo
-
-}
-
-function addAUDITrules {
-
-#Checking if the audit rules file exists.
-if [ ! -e "$AUDITRULES" ]; then
-    echo
-    echo "[ERROR] $AUDITRULES does not exist."
-    echo
-    echo "[ERROR] Please ensure that the audit daemon is installed properly and run the script again."
-    echo
-    echo "[ERROR] Quitting script."
-    exit
-fi
-
-echo
-echo "Adding audit rules to $AUDITRULES."
-
-#start adding rules
-
-if [ -d '/var/log/audit' ]; then
-	echo "-w /var/log/audit -p wa -k audit_logs_wa" >> $AUDITRULES
-fi
-if [ -e '/var/log/boot.log' ]; then
-	echo "-w /var/log/boot.log -p wa -k boot_log_wa" >> $AUDITRULES
-fi
-if [ -e '/var/log/secure' ]; then
-	echo "-w /var/log/secure -p wa -k secure_log_wa" >> $AUDITRULES
-fi
-if [ -e '/etc/fstab' ]; then
-	echo "-w /etc/fstab -p wa -k fstab_wa" >> $AUDITRULES
-fi
-if [ -e '/etc/shadow' ]; then
-	echo "-w /etc/shadow -p wa -k shadow_wa" >> $AUDITRULES
-fi
-if [ -e '/etc/security/console.perms' ]; then
-	echo "-w /etc/security/console.perms -p wa -k consoleperms1_wa" >> $AUDITRULES
-fi
-if [ -e '/etc/security/console.perms.d/50-default.perms' ]; then
-	echo "-w /etc/security/console.perms.d/50-default.perms -p wa -k consoleperms2_wa" >> $AUDITRULES
-fi
-if [ -e '/etc/ssh/sshd_config' ]; then
-	echo "-w /etc/ssh/sshd_config -p wa -k sshd_config_wa" >> $AUDITRULES
-fi
-if [ -e '/etc/vsftpd/ftpusers' ]; then
-	echo "-w /etc/vsftpd/ftpusers -p wa -k vsftpd_users_wa" >> $AUDITRULES
-fi
-if [ -e '/etc/ftpusers' ]; then
-	echo "-w /etc/ftpusers -p wa -k ftpd_users_wa" >> $AUDITRULES
-fi
-if [ -d '/etc/rc.d/init.d/' ]; then
-	echo "-w /etc/rc.d/init.d -p wxa -k initd_wxa" >> $AUDITRULES
-fi
-if [ -d '/etc/xinetd.d/' ]; then
-	echo "-w /etc/xinetd.d/ -p wxa -k xinetd_wxa" >> $AUDITRULES
-fi
-
-echo "Done!"
-
 }
 
 function removePREVIOUS {
-
 #Taking a backup of the current file before removing the configuration.
 takeBACKUP $1 "beforeremove"
 
 logit 1 "Removing previous script configuration from $1."
-sed -i '/###Added using the LinuxSyslogScript - AA###/,+2d' $1
+sed -i '/###Added using .* - AA###/,+2d' $1
 #sed -i 's/active = yes/active = no/' $AUDISP
 #sed -i '/audit_logs_wa/d;/boot_log_wa/d;/secure_log_wa/d;/fstab_wa/d;/shadow_wa/d;/consoleperms1_wa/d;/consoleperms2_wa/d;/sshd_config_wa/d;/vsftpd_users_wa/d;/ftpd_users_wa/d;/initd_wxa/d;/xinetd_wxa/d' $AUDITRULES
 logit 1 "Done!"
 echo
-
 }
 
 function editCONF {
-
-#Checking if the conf file exists.
-#This shouldn't really be matched by now with all the previous checks, but there's no harm in putting it in.
-if [ ! -e "$1" ]; then
-    logit 3 "$1 does not exist."
-    logit 3 "The script will now quit."
-    exit
-fi
-
 #Taking a backup of the current .conf file.
 takeBACKUP $1 "beforeconfig"
 
 #Adding the configuration to the conf file.
 logit 1 "Adding the configuration to $1."
-echo
 cat <<EOF >> $1
 
-###Added using the LinuxSyslogScript - AA###
+###Added using $BASENAME - AA###
 ###$LOGTYPETEXT - AA###
 $LOGTYPE                              @$EXTIP
 EOF
 
-#If the string "###Added using the LinuxSyslogScript - AA###" cannot be found in the conf file,
+#If the string "###Added using .* - AA###" cannot be found in the conf file,
 #i.e. if the script couldn't edit the file and/or something went wrong, output the below error messages.
-#Hopefully, this shouldn't really happen since we're running as root.
-if ! grep -q '###Added using the LinuxSyslogScript - AA###' "$1"; then
+#Hopefully, this shouldn't really happen since we're running as root and the file exists.
+if ! grep -q '###Added using .* - AA###' "$1"; then
     logit 3 "Unable to add the configuration to $1."
     logit 3 "Is $1 editable?"
     logit 3 "Quitting script."
@@ -307,10 +288,9 @@ if ! grep -q '###Added using the LinuxSyslogScript - AA###' "$1"; then
 fi
 logit 1 "Done!"
 echo
-
 }
 
-#--------------------------- END FUNCTIONS ---------------------------#
+#--------------------------------------------- END FUNCTIONS ---------------------------------------------#
 
 #Start of the actual script.
 if [ ! "$RHELV" == "" ]; then
@@ -334,32 +314,20 @@ echo
 
 #The script has been designed in this way (i.e. ask the user for different kinds of logs separately) to allow for future expansion of the script,
 #instead of giving them one choice between a list of log types.
-logit 4 "Asking the user if they want to send authentication logs."
-echo "Do you want to send authentication logs?"
-select SELECTION in "Yes" "No"; do
-	case $SELECTION in
-		"Yes" )
-			LOGTYPE="$LOGTYPE,authpriv.info"
-			LOGTYPETEXT="$LOGTYPETEXT & authentication"
-			break
-			;;
-		"No" )
-			break
-			;;
-	esac
-done
-logit 4 "User selected: $SELECTION."
-echo
-
-if [ "$AUDITDNI" != 1 -a "$AUDITSPNI" != 1 ]; then
-	logit 4 "Asking the user if they want to send audit daemon logs."
-	echo "Do you want to send audit daemon logs?"
+#First, check if the user passed the --auth argument when running the script.
+if [ "$SAUTH" == 1 ]; then
+	LOGTYPE="$LOGTYPE,authpriv.info"
+	LOGTYPETEXT="$LOGTYPETEXT & authentication"
+#If they didn't pass that argument (i.e. SAUTH!=1), and there are no other "send" arguments passed (such as --audit) (i.e. SARGS!=1),
+#then ask them if they want to send auth logs.
+elif [ "$SARGS" != 1 ]; then
+	logit 4 "Asking the user if they want to send authentication logs."
+	echo "Do you want to send authentication logs?"
 	select SELECTION in "Yes" "No"; do
 		case $SELECTION in
 			"Yes" )
-				LOGTYPE="$LOGTYPE,user.info"
-				LOGTYPETEXT="$LOGTYPETEXT & audit"
-				ENABLEAUDIT=1
+				LOGTYPE="$LOGTYPE,authpriv.info"
+				LOGTYPETEXT="$LOGTYPETEXT & authentication"
 				break
 				;;
 			"No" )
@@ -368,12 +336,48 @@ if [ "$AUDITDNI" != 1 -a "$AUDITSPNI" != 1 ]; then
 		esac
 	done
 	logit 4 "User selected: $SELECTION."
+	echo
+fi
+
+if [ "$SAUDIT" == 1 ]; then
+	#If the user wants to send audit logs, we need to check if the audit daemon and the audit syslog plugin are installed or not.
+	if [ "$AUDITDNI" != 1 -a "$AUDITSPNI" != 1 ]; then
+		LOGTYPE="$LOGTYPE,user.info"
+		LOGTYPETEXT="$LOGTYPETEXT & audit"
+		ENABLEAUDIT=1
+	#If one of them is not installed, echo the below messages.
+	elif [ "$AUDITDNI" == 1 ]; then
+		logit 2 "Audit logs cannot be sent because you do not have the audit daemon (auditd) installed."
+	elif [ "$AUDITSPNI" == 1 ]; then
+		logit 2 "Audit logs cannot be sent because you do not have the audit daemon syslog plugin (audisp) installed."
+	fi
+elif [ "$SARGS" != 1 ]; then
+	#If no other "send" arguments are passed, then show the user the option to send audit logs only if the audit daemon and
+	#syslog plugin are installed.
+	if [ "$AUDITDNI" != 1 -a "$AUDITSPNI" != 1 ]; then
+		logit 4 "Asking the user if they want to send audit daemon logs."
+		echo "Do you want to send audit daemon logs?"
+		select SELECTION in "Yes" "No"; do
+			case $SELECTION in
+				"Yes" )
+					LOGTYPE="$LOGTYPE,user.info"
+					LOGTYPETEXT="$LOGTYPETEXT & audit"
+					ENABLEAUDIT=1
+					break
+					;;
+				"No" )
+					break
+					;;
+			esac
+		done
+		logit 4 "User selected: $SELECTION."
+	fi
 fi
 echo
 
-#Checking if the user actually chose to send logs.
-if [ $LOGTYPE=="" ]; then
-	logit 3 "You did not choose any logs to be sent."
+#Checking if, at this point, there are logs to send or not.
+if [ "$LOGTYPE" == "" ]; then
+	logit 3 "No logs have been configured to be sent."
 	logit 3 "Quitting script."
 	exit
 fi
@@ -395,7 +399,7 @@ if [ "$SKIPCONT" != "y" ]; then
 fi
 
 #Checking if the script was ran before.
-if grep -q '###Added using the LinuxSyslogScript - AA###' "$CONF"; then
+if grep -q '###Added using .* - AA###' "$CONF"; then
     logit 1 "This script was ran before."
 	logit 1 "To continue, the previous configuration has to be removed".
 	echo
@@ -410,7 +414,7 @@ if grep -q '###Added using the LinuxSyslogScript - AA###' "$CONF"; then
         echo
 	fi
     removePREVIOUS $CONF
-	#Commenting the below line because there is no need to restart the syslog daemon since we are going to
+	#Commenting out the below line because there is no need to restart the syslog daemon since we are going to
 	#restart it after applying the actual configuration anyways.
 	#restartSERVICE $(basename $CONF .conf)
 fi
@@ -432,6 +436,13 @@ editCONF $CONF
 restartSERVICE $(basename $CONF .conf)
 
 echo
+if [ "$SHHH" == 1 ]; then
+	echo "ALL DONE!"
+	if [ "$UNABLETORESTART" == 1 ]; then
+		echo "[WARN]  One of the services could not be restarted."
+		echo "[WARN]  Please see the log file that was created in the working directory for [WARN] messages for more info."
+	fi
+fi
 logit 1 "ALL DONE!"
 logit 1 "This machine is now configured to send $LOGTYPETEXT to $EXTIP using the $DAEMON daemon." 
 logit 1 "Please confirm that the server you're sending logs to is actually receiving them."
