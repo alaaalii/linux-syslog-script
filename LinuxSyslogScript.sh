@@ -1,8 +1,13 @@
 #!/bin/bash
 
+# Author:		Alaa Ali <contact.alaa@gmail.com>
+# LinkedIn:		http://www.linkedin.com/in/alaaalii
+# Created on:	March 16, 2014
+# Feel free to do anything you want with the script. Just give credit where credit is due =).
+
 #Check if the script is being run as root.
 if [ "$(whoami)" != "root" ]; then
-    echo "[ERROR] You must run $(basename $0) as root."
+    echo "You must run $(basename $0) as root."
     exit
 fi
 
@@ -21,9 +26,9 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program. If not, see <http://www.gnu.org/licenses/>.  
 
-This script is maintaned here: https://github.com/alaaalii/LinuxSyslogScript"
+This script is maintained here: https://github.com/alaaalii/LinuxSyslogScript"
 
-USAGE="Usage: $(basename $0) [options]
+USAGE="Usage: ./$(basename $0) [options]
 
 $(basename $0) is a script used to configure your Linux machine to send authentication
 and/or audit logs to an external (syslog) server through the syslog daemon.
@@ -43,6 +48,10 @@ Options include:
   -q, --quiet		   Do not display any messages (except ERROR messages).
   -qq			   Same as -q, but implies -y.
   -y, --yes		   Assume Yes to all \"Continue?\" questions and do not display prompts.
+
+This script works by editing the syslog.conf or rsyslog.conf file to add the necessary line to send
+logs. If audit logs are chosen to be sent, it will also edit the file /etc/audisp/plugins.d/syslog.conf.
+The script takes a backup of any file before editing it.
 
 LinuxSyslogScript, Copyright (C) 2014 Alaa Ali
 LinuxSyslogScript comes with ABSOLUTELY NO WARRANTY; for details, pass the -l option to the script.
@@ -112,7 +121,7 @@ function logit {
 		echo -e "$TIMEDATE   [INFO]\t$LOG" >> $LOGFILE
 	elif [ "$LLEVEL" == 2 ]; then
 		if [ "$SHHH" != 1 ]; then
-			echo -e "[INFO]\t$LOG"
+			echo -e "[WARN]\t$LOG"
 		fi
 		echo -e "$TIMEDATE   [WARN]\t$LOG" >> $LOGFILE
 	elif [ "$LLEVEL" == 3 ]; then
@@ -122,23 +131,6 @@ function logit {
 		echo -e "$TIMEDATE   [INPUT]\t$LOG" >> $LOGFILE
     fi
 }
-
-if [ "$SHHH" != 1 ]; then
-	#Print description.
-	echo "Description:"
-	echo "------------"
-fi
-
-if [ "$SKIPCONT" != "y" ]; then
-    #Asking to proceed.
-	read -p "Continue? [y/n]: " CONT
-    if [ "$CONT" != "y" ]; then
-        logit 4 "User chose to quit script."
-        logit 3 "Quitting script."
-        exit
-    fi
-    echo
-fi
 
 #Defining some global variables.
 SYSPIDF=/var/run/syslogd.pid
@@ -347,8 +339,10 @@ if [ "$SAUDIT" == 1 ]; then
 	#If one of them is not installed, echo the below messages.
 	elif [ "$AUDITDNI" == 1 ]; then
 		logit 2 "Audit logs cannot be sent because you do not have the audit daemon (auditd) installed."
+		UNABLETOSENDAUDIT=1
 	elif [ "$AUDITSPNI" == 1 ]; then
 		logit 2 "Audit logs cannot be sent because you do not have the audit daemon syslog plugin (audisp) installed."
+		UNABLETOSENDAUDIT=1
 	fi
 elif [ "$SARGS" != 1 ]; then
 	#If no other "send" arguments are passed, then show the user the option to send audit logs only if the audit daemon and
@@ -435,10 +429,17 @@ editCONF $CONF
 restartSERVICE $(basename $CONF .conf)
 
 echo
+#If the user chose to run quietly (-q or -qq) and there were warning messages because of being unable to restart a service
+#or send audit logs (because the required components are not installed (auditd and audisp)), echo the below messages.
 if [ "$SHHH" == 1 ]; then
-	echo "ALL DONE!"
-	if [ "$UNABLETORESTART" == 1 ]; then
-		echo "[WARN]  One of the services could not be restarted."
+	#echo "ALL DONE!"
+	if [ "$UNABLETORESTART" == 1 -o "$UNABLETOSENDAUDIT" == 1 ]; then
+		if [ "$UNABLETORESTART" == 1 ]; then
+			echo "[WARN]  One of the services could not be restarted."
+		fi
+		if [ "$UNABLETOSENDAUDIT" == 1 ]; then
+			echo "[WARN]  Audit logs cannot be sent because you do not have one of the required components installed."
+		fi
 		echo "[WARN]  Please see the log file that was created in the working directory for [WARN] messages for more info."
 	fi
 fi
