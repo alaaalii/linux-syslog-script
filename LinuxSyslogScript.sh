@@ -21,8 +21,7 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program. If not, see <http://www.gnu.org/licenses/>.  
 
-For more information on the script and for updated versions,
-see: https://github.com/alaaalii/LinuxSyslogScript"
+This script is maintaned here: https://github.com/alaaalii/LinuxSyslogScript"
 
 USAGE="Usage: $(basename $0) [options]
 
@@ -50,7 +49,7 @@ LinuxSyslogScript comes with ABSOLUTELY NO WARRANTY; for details, pass the -l op
 This is free software, and you are welcome to redistribute it
 under certain conditions; pass the -l option to the script for details.
 
-For more information on the script and for updated versions, see: https://github.com/alaaalii/LinuxSyslogScript"
+This script is maintained here: https://github.com/alaaalii/LinuxSyslogScript"
 
 for i in "$@"
 do
