@@ -108,7 +108,14 @@ do
 done
 
 #Initiating the log file.
-LOGFILE=$(basename $0 .sh).$(date +%Y-%m-%d_%H-%M-%S).log
+LOGFILE=$(basename $0 .sh).$(date +%Y-%m-%d).log
+
+cat <<EOF >> $LOGFILE
+#======================================================#
+$(date)
+Start log:
+
+EOF
 
 function logit {
     TIMEDATE=$(date +"%a %b %e %Y %T")
@@ -134,7 +141,7 @@ function logit {
 
 #Defining some global variables.
 SYSPIDF=/var/run/syslogd.pid
-RHELV=$(cat /etc/redhat-release 2&> /dev/null | sed s/.*release\ // | sed s/\ .*// | cut -c1)
+RHELV=$(cat /etc/redhat-release 2> /dev/null | sed s/.*release\ // | sed s/\ .*// | cut -c1)
 SYSCONF=/etc/syslog.conf
 RSYSCONF=/etc/rsyslog.conf
 AUDITLOG=/var/log/audit/audit.log
@@ -149,7 +156,7 @@ BASENAME=$(basename $0)
 if [ ! -e $SYSCONF -a ! -e $RSYSCONF ]; then
     logit 3 "A syslog daemon is not installed on this machine."
 	logit 3 "Please install syslog or rsyslog in order to run this script."
-	exit
+	exit 1
 fi
 
 #Finding out if a syslog daemon is running using the pid file.
@@ -163,9 +170,9 @@ fi
 #Finding out which syslog daemon is actually installed (syslog or rsyslog).
 #The script will first check which one is running.
 #If none are running, it will fall back to check which .conf file exists, checking for rsyslog first because both can exist.
-if cat $SYSPIDF 2&> /dev/null | xargs ps -p 2&> /dev/null | grep -q rsyslog; then
+if cat $SYSPIDF 2> /dev/null | xargs ps -p 2> /dev/null | grep -q rsyslog; then
     DAEMON=rsyslog
-elif cat $SYSPIDF 2&> /dev/null | xargs ps -p 2&> /dev/null | grep -q syslog; then
+elif cat $SYSPIDF 2> /dev/null | xargs ps -p 2> /dev/null | grep -q syslog; then
     DAEMON=syslog
 elif [ -e $RSYSCONF ]; then
 	DAEMON=rsyslog
@@ -173,7 +180,7 @@ elif [ -e $SYSCONF ]; then
 	DAEMON=syslog
 else
     logit 3 "Could not determine which syslog daemon is installed. The script will now exit."
-	exit
+	exit 1
 fi
 logit 1 "Found $DAEMON daemon."
 CONF=/etc/$DAEMON.conf
@@ -275,7 +282,7 @@ if ! grep -q '###Added using .* - AA###' "$1"; then
     logit 3 "Unable to add the configuration to $1."
     logit 3 "Is $1 editable?"
     logit 3 "Quitting script."
-    exit
+    exit 1
 fi
 logit 1 "Done!"
 echo
@@ -299,7 +306,7 @@ fi
 if [[ ! "$EXTIP" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
     logit 3 "The value you entered is not a valid IP address."
 	logit 3 "Quitting script."
-	exit
+	exit 1
 fi
 echo
 
@@ -372,7 +379,7 @@ echo
 if [ "$LOGTYPE" == "" ]; then
 	logit 3 "No logs have been configured to be sent."
 	logit 3 "Quitting script."
-	exit
+	exit 1
 fi
 
 #Sanitizing LOGTYPE because there's a leading comma.
