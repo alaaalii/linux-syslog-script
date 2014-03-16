@@ -454,3 +454,6 @@ logit 1 "ALL DONE!"
 logit 1 "This machine is now configured to send $LOGTYPETEXT to $EXTIP using the $DAEMON daemon." 
 logit 1 "Please confirm that the server you're sending logs to is actually receiving them."
 logit 1 "If it's not, a troubleshooting step would be to double check that UDP port 514 is open on that server."
+echo "" >> $LOGFILE
+echo "End log." >> $LOGFILE
+echo "" >> $LOGFILE
