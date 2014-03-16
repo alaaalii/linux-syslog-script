@@ -6,6 +6,19 @@ if [ "$(whoami)" != "root" ]; then
     exit
 fi
 
+USAGE="Usage: $(basename $0) [options]
+
+$(basename $0) is a script that will...yada yada yada.
+
+Options include:
+  -h,--help	Print this help message.
+  -y,--yes	Assume Yes to all \"Continue?\" questions and do not display prompts."
+
+if [ "$1" == "-h" -o "$1" == "--help" ]; then
+    echo "$USAGE"
+	exit
+fi
+
 if [ "$1" == "-y" -o "$1" == "--yes" ]; then
     SKIPCONT="y"
 fi
@@ -57,7 +70,7 @@ AUDITLOG=/var/log/audit/audit.log
 AUDISP=/etc/audisp/plugins.d/syslog.conf
 AUDITRULES=/etc/audit/audit.rules
 
-### CHECKS BEFORE BEGINNING ###
+#--------------------------- START CHECKS ---------------------------#
 
 #Checking if either syslog or rsyslog is installed.
 #By default, RHEL should at least have syslog installed, so this part should rarely be true.
@@ -108,7 +121,9 @@ if [ ! -e "$AUDISP" ]; then
     AUDITSPNI=1
 fi
 
-### START FUNCTIONS ###
+#--------------------------- END CHECKS ---------------------------#
+
+#--------------------------- START FUNCTIONS ---------------------------#
 
 function takeBACKUP {
 
@@ -150,16 +165,15 @@ echo
 
 #Enabling the auditd syslog plugin to direct logs to syslog.
 logit 1 "Enabling the auditd syslog plugin."
-echo
 if grep -q 'active = no' "$AUDISP"; then
 	sed -i 's/active = no/active = yes/' $AUDISP
 	#check to see if it couldn't edit the file.
-	if ! grep -q 'active = yes' "$AUDISP"; then
+	if grep -q 'active = yes' "$AUDISP"; then
+		logit 1 "Done!"
+	else
 		logit 2 "Unable to enable the auditd syslog plugin."
 		logit 2 "Audit logs will not be sent."
-		echo
 	fi
-	logit 1 "Done!"
 elif grep -q 'active = yes' "$AUDISP"; then
 	logit 1 "It's already enabled."
 fi
@@ -169,7 +183,7 @@ echo
 
 function addAUDITrules {
 
-#checking if the audit rules file exists.
+#Checking if the audit rules file exists.
 if [ ! -e "$AUDITRULES" ]; then
     echo
     echo "[ERROR] $AUDITRULES does not exist."
@@ -254,38 +268,7 @@ fi
 #Taking a backup of the current .conf file.
 takeBACKUP $1 "beforeconfig"
 
-#taking a backup of the current audit rules file
-# echo
-# echo "Taking a backup of the current audit rules file."
-# echo "It will be saved as $AUDITRULES.`date +%Y-%m-%d_%H-%M-%S`.bak."
-# cp $AUDITRULES $AUDITRULES.`date +%Y-%m-%d_%H-%M-%S`.bak
-# echo "Done!"
-# echo
-
-#check if previous SSIEM configuration exists
-# echo "Checking if previous Symantec SIEM configuration exists."
-# if grep -qiE 'adcb0314|adcb0315' "$RSYSCONF"; then
-	# echo "Previous Symantec SIEM configuration exists. This will be now be removed."
-	# sed -i '/adcb0314/d;/adcb0315/d' $RSYSCONF
-	# echo "Done!"
-	# echo
-# fi
-
-#check if the script was ran before.
-# echo "Checking if previous QRadar configuration exists."
-# if grep -qiE '### QRadar ###|QRadar using Linux Script|Enabling auditd monitoring' "$RSYSCONF"; then
-    # echo
-    # echo "Previous QRadar configuration exists."
-	# echo
-    # deletepreviousSIX
-# else
-    # echo "It doesn't exist."
-# fi
-
-####### END CHECKS #######
-
 #Adding the configuration to the conf file.
-
 logit 1 "Adding the configuration to $1."
 echo
 cat <<EOF >> $1
@@ -309,7 +292,7 @@ echo
 
 }
 
-### END FUNCTIONS ###
+#--------------------------- END FUNCTIONS ---------------------------#
 
 #Start of the actual script.
 if [ ! "$RHELV" == "" ]; then
