@@ -11,17 +11,41 @@ USAGE="Usage: $(basename $0) [options]
 $(basename $0) is a script that will...yada yada yada.
 
 Options include:
-  -h,--help	Print this help message.
-  -y,--yes	Assume Yes to all \"Continue?\" questions and do not display prompts."
+  -h,--help		Print this help message.
+  --remoteip=IPADDRESS	The IP address to which you want this server to send logs to.
+  -q,--quiet		Do not display any messages (except ERROR messages) when running the script. This requires that all other arguments are passed.
+  -y,--yes		Assume Yes to all \"Continue?\" questions and do not display prompts."
 
-if [ "$1" == "-h" -o "$1" == "--help" ]; then
-    echo "$USAGE"
-	exit
-fi
+for i in "$@"
+do
+	case $i in
+		-h|--help)
+			echo "$USAGE"
+			exit
+			;;
+		-q|--quiet)
+			SHHH=1
+			shift
+			;;
+		--remoteip=*)
+			EXTIP="${i#*=}"
+			shift
+			;;
+		-y|--yes)
+			SKIPCONT="y"
+			shift
+			;;
+	esac
+done
+  
+# if [ "$1" == "-h" -o "$1" == "--help" ]; then
+    # echo "$USAGE"
+	# exit
+# fi
 
-if [ "$1" == "-y" -o "$1" == "--yes" ]; then
-    SKIPCONT="y"
-fi
+# if [ "$1" == "-y" -o "$1" == "--yes" ]; then
+    # SKIPCONT="y"
+# fi
 
 #Initiating the log file.
 LOGFILE=$(basename $0 .sh).$(date +%Y-%m-%d_%H-%M-%S).log
@@ -131,7 +155,7 @@ function takeBACKUP {
 if [ $2 == "beforeconfig" ]; then
     logit 1 "Taking a backup of $1 right before applying configuration."
 elif [ $2 == "beforeremove" ]; then
-	logit 1 "Taking a backup of $1 right before remove previous configuration."
+	logit 1 "Taking a backup of $1 right before removing previous configuration."
 fi
 
 logit 1 "The backup will be saved as $1.`date +%Y-%m-%d_%H-%M-%S`.$2."
@@ -161,21 +185,16 @@ function enableAUDISP {
 
 #Taking a backup of the current audisp file.
 takeBACKUP $AUDISP "beforeconfig"
-echo
 
 #Enabling the auditd syslog plugin to direct logs to syslog.
 logit 1 "Enabling the auditd syslog plugin."
-if grep -q 'active = no' "$AUDISP"; then
-	sed -i 's/active = no/active = yes/' $AUDISP
-	#check to see if it couldn't edit the file.
-	if grep -q 'active = yes' "$AUDISP"; then
-		logit 1 "Done!"
-	else
-		logit 2 "Unable to enable the auditd syslog plugin."
-		logit 2 "Audit logs will not be sent."
-	fi
-elif grep -q 'active = yes' "$AUDISP"; then
-	logit 1 "It's already enabled."
+sed -i 's/active = no/active = yes/' $AUDISP
+#check to see if it couldn't edit the file.
+if grep -q 'active = yes' "$AUDISP"; then
+	logit 1 "Done!"
+else
+	logit 2 "Unable to enable the auditd syslog plugin."
+	logit 2 "Audit logs will not be sent."
 fi
 echo
 
@@ -244,10 +263,9 @@ function removePREVIOUS {
 
 #Taking a backup of the current file before removing the configuration.
 takeBACKUP $1 "beforeremove"
-echo
 
 logit 1 "Removing previous script configuration from $1."
-sed -i '/###Added using the LinuxSyslogScript - AAA###/,+2d' $1
+sed -i '/###Added using the LinuxSyslogScript - AA###/,+2d' $1
 #sed -i 's/active = yes/active = no/' $AUDISP
 #sed -i '/audit_logs_wa/d;/boot_log_wa/d;/secure_log_wa/d;/fstab_wa/d;/shadow_wa/d;/consoleperms1_wa/d;/consoleperms2_wa/d;/sshd_config_wa/d;/vsftpd_users_wa/d;/ftpd_users_wa/d;/initd_wxa/d;/xinetd_wxa/d' $AUDITRULES
 logit 1 "Done!"
@@ -273,15 +291,15 @@ logit 1 "Adding the configuration to $1."
 echo
 cat <<EOF >> $1
 
-###Added using the LinuxSyslogScript - AAA###
-###$LOGCHOICE - AAA###
+###Added using the LinuxSyslogScript - AA###
+###$LOGTYPETEXT - AA###
 $LOGTYPE                              @$EXTIP
 EOF
 
-#If the string "###Added using the LinuxSyslogScript - AAA###" cannot be found in the conf file,
+#If the string "###Added using the LinuxSyslogScript - AA###" cannot be found in the conf file,
 #i.e. if the script couldn't edit the file and/or something went wrong, output the below error messages.
 #Hopefully, this shouldn't really happen since we're running as root.
-if ! grep -q '###Added using the LinuxSyslogScript - AAA###' "$1"; then
+if ! grep -q '###Added using the LinuxSyslogScript - AA###' "$1"; then
     logit 3 "Unable to add the configuration to $1."
     logit 3 "Is $1 editable?"
     logit 3 "Quitting script."
@@ -299,11 +317,14 @@ if [ ! "$RHELV" == "" ]; then
 	logit 1 "Red Hat version $RHELV detected."
 fi
 echo
-logit 4 "Asking the user to type the IP address that they want this server to send logs to."
-read -p "Type the IP address that you want this server to send logs to: " EXTIP
-logit 4 "User typed: $EXTIP."
 
-#Validating that the entered value is a valid IP address.
+if [ "$EXTIP" == "" ]; then
+	logit 4 "Asking the user to type the IP address that they want this server to send logs to."
+	read -p "Type the IP address that you want this server to send logs to: " EXTIP
+	logit 4 "User typed: $EXTIP."
+fi
+
+#Validating that the entered value for EXTIP is a valid IP address.
 if [[ ! "$EXTIP" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
     logit 3 "The value you entered is not a valid IP address."
 	logit 3 "Quitting script."
@@ -311,51 +332,56 @@ if [[ ! "$EXTIP" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
 fi
 echo
 
-if [ "$AUDITDNI" == 1 -o "$AUDITSPNI" == 1 ]; then
-	if [ "$AUDITDNI" == 1 ]; then
-	    logit 2 "The audit daemon (auditd) is not installed. You will not get the option to send audit logs."
-	elif [ "$AUDITSPNI" == 1 ]; then
-	    logit 2 "The audit daemon syslog plugin (audisp) is not installed. You will not get the option to send audit logs."
-	fi
-    OPTIONS=("Authentication logs" "Quit script")
-	echo
-else
-	OPTIONS=("Authentication logs" "Audit daemon logs" "Authentication and audit daemon logs" "Quit script")
+#The script has been designed in this way (i.e. ask the user for different kinds of logs separately) to allow for future expansion of the script,
+#instead of giving them one choice between a list of log types.
+logit 4 "Asking the user if they want to send authentication logs."
+echo "Do you want to send authentication logs?"
+select SELECTION in "Yes" "No"; do
+	case $SELECTION in
+		"Yes" )
+			LOGTYPE="$LOGTYPE,authpriv.info"
+			LOGTYPETEXT="$LOGTYPETEXT & authentication"
+			break
+			;;
+		"No" )
+			break
+			;;
+	esac
+done
+logit 4 "User selected: $SELECTION."
+echo
+
+if [ "$AUDITDNI" != 1 -a "$AUDITSPNI" != 1 ]; then
+	logit 4 "Asking the user if they want to send audit daemon logs."
+	echo "Do you want to send audit daemon logs?"
+	select SELECTION in "Yes" "No"; do
+		case $SELECTION in
+			"Yes" )
+				LOGTYPE="$LOGTYPE,user.info"
+				LOGTYPETEXT="$LOGTYPETEXT & audit"
+				ENABLEAUDIT=1
+				break
+				;;
+			"No" )
+				break
+				;;
+		esac
+	done
+	logit 4 "User selected: $SELECTION."
+fi
+echo
+
+#Checking if the user actually chose to send logs.
+if [ $LOGTYPE=="" ]; then
+	logit 3 "You did not choose any logs to be sent."
+	logit 3 "Quitting script."
+	exit
 fi
 
-logit 4 "Asking the user to pick the type of logs they want to send."
-echo "What type of logs do you want to send?"
-echo
-select LOGCHOICE in "${OPTIONS[@]}"; do
-#select LOGCHOICE in "Authentication logs" "Audit daemon logs" "Authentication and audit daemon logs"; do
-    case $LOGCHOICE in
-        "Authentication logs" )
-		    LOGTYPE=authpriv.info
-		    break
-		    ;;
-        "Audit daemon logs" )
-		    LOGTYPE=user.info
-			ENABLEAUDIT=1
-		    break
-			;;
-        "Authentication and audit daemon logs" )
-		    LOGTYPE=authpriv.info,user.info
-			ENABLEAUDIT=1
-			break
-			;;
-		"Quit script" )
-		    logit 4 "User chose to quit script."
-		    logit 1 "Quitting script"
-			exit
-			break
-			;;
-    esac
-done
-echo
-logit 4 "User picked: $LOGCHOICE."
-logit 1 "The script will now configure $(awk -v VAR="$LOGCHOICE" 'BEGIN {print tolower(VAR)}') to be sent to $EXTIP."
-#Fancy, eh? It converts the variable to lower case. God bless the people of the Internet.
-echo
+#Sanitizing LOGTYPE because there's a leading comma.
+LOGTYPE=$(echo $LOGTYPE | sed 's/^,//')
+#Sanitizing LOGTYPETEXT because there's a leading ampersand and white space.
+LOGTYPETEXT="$(echo $LOGTYPETEXT | sed 's/^& //') logs"
 
 if [ "$SKIPCONT" != "y" ]; then
     #asking to proceed.
@@ -369,7 +395,7 @@ if [ "$SKIPCONT" != "y" ]; then
 fi
 
 #Checking if the script was ran before.
-if grep -q '###Added using the LinuxSyslogScript - AAA###' "$CONF"; then
+if grep -q '###Added using the LinuxSyslogScript - AA###' "$CONF"; then
     logit 1 "This script was ran before."
 	logit 1 "To continue, the previous configuration has to be removed".
 	echo
@@ -384,17 +410,22 @@ if grep -q '###Added using the LinuxSyslogScript - AAA###' "$CONF"; then
         echo
 	fi
     removePREVIOUS $CONF
-	restartSERVICE $(basename $CONF .conf)
+	#Commenting the below line because there is no need to restart the syslog daemon since we are going to
+	#restart it after applying the actual configuration anyways.
+	#restartSERVICE $(basename $CONF .conf)
 fi
 
 #If the user chose to send audit logs, we have to enable the audit syslog plugin.
+#However, only call the functions if the audit syslog plugin is not already enabled.
 if [ "$ENABLEAUDIT" == 1 ]; then
-    #Calling function to enable the audit syslog plugin.
-    enableAUDISP
-	#Calling function to restart the audit daemon.
-	restartSERVICE auditd
+	if grep -q 'active = no' "$AUDISP"; then
+		#Calling function to enable the audit syslog plugin.
+		enableAUDISP
+		#Calling function to restart the audit daemon.
+		restartSERVICE auditd
+	fi
 fi
-
+	
 #Calling function to edit the conf file.
 editCONF $CONF
 #Calling function to restart the service.
@@ -402,6 +433,6 @@ restartSERVICE $(basename $CONF .conf)
 
 echo
 logit 1 "ALL DONE!"
-logit 1 "This machine is now configured to send $(awk -v VAR="$LOGCHOICE" 'BEGIN {print tolower(VAR)}') to $EXTIP using the $DAEMON daemon." 
+logit 1 "This machine is now configured to send $LOGTYPETEXT to $EXTIP using the $DAEMON daemon." 
 logit 1 "Please confirm that the server you're sending logs to is actually receiving them."
 logit 1 "If it's not, a troubleshooting step would be to double check that UDP port 514 is open on that server."
