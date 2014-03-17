@@ -34,27 +34,35 @@ This script is maintained here: https://github.com/alaaalii/LinuxSyslogScript"
 USAGE="Usage: ./$(basename $0) [options]
 
 $(basename $0) is a script used to configure your Linux machine to send authentication
-and/or audit logs to an external (syslog) server through the syslog daemon.
+and/or audit logs to an external (syslog) server through the syslog daemon. The script is interactive,
+so you can run it without arguments, or pass the arguments as illustrated in the below OPTIONS list. 
 
-If the script is run without specifying the remote IP address, you will be prompted to enter it.
-If the script is run without specifying any \"send\" arguments (--audit or --auth), you will
-be prompted to choose which logs to send. If you pass one or more \"send\" arguments, the script
-will assume that you only want to send that and you will not be prompted while the script is running
-to choose other log types. 
-
-Options include:
-      --audit		   Send audit daemon logs.
+OPTIONS:
+      --audit		   Send audit daemon logs (requires auditd & audisp to be installed).
       --auth		   Send authentication logs.
   -h, --help		   Print this help message.
       --remoteip=X.X.X.X   The IP address to which you want this server to send logs to.
   -l, --license		   Show license information.
-  -q, --quiet		   Do not display any messages (except ERROR messages).
+  -q, --quiet		   Do not display any progress messages (this will still display WARN and ERROR messages).
   -qq			   Same as -q, but implies -y.
   -y, --yes		   Assume Yes to all \"Continue?\" questions and do not display prompts.
 
 This script works by editing the syslog.conf or rsyslog.conf file to add the necessary line to send
 logs. If audit logs are chosen to be sent, it will also edit the file /etc/audisp/plugins.d/syslog.conf.
-The script takes a backup of any file before editing it.
+The script takes a backup of any file before editing it. If the script detects that it was ran before on
+this machine, it will prompt you to remove the previous configuration and it will not continue without removing it.
+
+EXAMPLES:
+  To configure your Linux server to send authentication logs to 192.168.1.1, the usage would be:
+	./$(basename $0) --remoteip=192.168.1.1 --auth
+	
+  To configure your Linux server to send audit logs to 172.16.2.1 and suppress all \"Continue\" prompts,
+  the usage would be:
+	./$(basename $0) --remoteip=172.16.2.1 --audit -y
+	
+  To configure your Linux server to send authentication and audit logs to 10.140.15.1 and suppress all
+  \"Continue\" prompts and progress messages, the usage would be:
+	./$(basename $0) --remoteip=10.140.15.1 --auth --audit -q -y
 
 LinuxSyslogScript, Copyright (C) 2014 Alaa Ali
 LinuxSyslogScript comes with ABSOLUTELY NO WARRANTY; for details, pass the -l option to the script.
@@ -63,6 +71,7 @@ under certain conditions; pass the -l option to the script for details.
 
 This script is maintained here: https://github.com/alaaalii/LinuxSyslogScript"
 
+ARGS="$@"
 for i in "$@"
 do
 	case $i in
@@ -116,6 +125,7 @@ LOGFILE=$(basename $0 .sh).$(date +%Y-%m-%d).log
 cat <<EOF >> $LOGFILE
 #======================================================#
 $(date)
+Arguments passed: "$ARGS"
 Start log:
 
 EOF
@@ -390,11 +400,12 @@ LOGTYPE=$(echo $LOGTYPE | sed 's/^,//')
 #Sanitizing LOGTYPETEXT because there's a leading ampersand and white space.
 LOGTYPETEXT="$(echo $LOGTYPETEXT | sed 's/^& //') logs"
 
+logit 1 "The script will now configure $LOGTYPETEXT to be sent to $EXTIP using the $DAEMON daemon."
 if [ "$SKIPCONT" != "y" ]; then
-    #asking to proceed.
+	logit 4 "Asking the user to continue."
     read -p "Continue? [y/n]: " CONT
+	logit 4 "User typed: $CONT."
     if [ "$CONT" != "y" ]; then
-        logit 4 "User chose to quit script."
         logit 3 "Quitting script."
         exit
     fi
