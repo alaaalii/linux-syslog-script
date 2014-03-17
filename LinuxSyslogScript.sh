@@ -3,6 +3,9 @@
 # Author:		Alaa Ali <contact.alaa@gmail.com>
 # LinkedIn:		http://www.linkedin.com/in/alaaalii
 # Created on:	March 16, 2014
+#
+# This script has been tested on Red Hat Enterprise Linux Server 5.10, 6.5 and Ubuntu 13.10.
+#
 # Feel free to do anything you want with the script. Just give credit where credit is due =).
 
 #Check if the script is being run as root.
@@ -314,7 +317,7 @@ echo
 #instead of giving them one choice between a list of log types.
 #First, check if the user passed the --auth argument when running the script.
 if [ "$SAUTH" == 1 ]; then
-	LOGTYPE="$LOGTYPE,authpriv.info"
+	LOGTYPE="$LOGTYPE,authpriv.*"
 	LOGTYPETEXT="$LOGTYPETEXT & authentication"
 #If they didn't pass that argument (i.e. SAUTH!=1), and there are no other "send" arguments passed (such as --audit) (i.e. SARGS!=1),
 #then ask them if they want to send auth logs.
@@ -324,7 +327,7 @@ elif [ "$SARGS" != 1 ]; then
 	select SELECTION in "Yes" "No"; do
 		case $SELECTION in
 			"Yes" )
-				LOGTYPE="$LOGTYPE,authpriv.info"
+				LOGTYPE="$LOGTYPE,authpriv.*"
 				LOGTYPETEXT="$LOGTYPETEXT & authentication"
 				break
 				;;
